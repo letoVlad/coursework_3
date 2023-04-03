@@ -12,18 +12,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
 
 import javax.annotation.PostConstruct;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class SocksServiceImpl implements SocksService {
-    private static int number = 0;
-    private static Map<Integer, Socks> socksList = new HashMap<>();
+    private Map<ColorSocks, Map<Long, Socks>> socksList = new HashMap<>();
     private final FileService fileService;
     private final ResourceLoader resourceLoader;
 
@@ -35,65 +30,73 @@ public class SocksServiceImpl implements SocksService {
 
     @Override
     public Socks addSocks(Socks socks) {
-        if (socks.getCottonPart() >= 0 && socks.getCottonPart() <= 100 && socks.getQuantity() > 0 && socks.getQuantity() % 1 == 0) {
-            socksList.put(number++, socks);
-            saveToFile();
-            return socks;
-        } else {
-            throw new IllegalArgumentException("Неверное значение количества носков.");
+        ColorSocks colorSocks = socks.getColorSocks();
+        Map<Long, Socks> socksByColor = socksList.getOrDefault(colorSocks, new HashMap<>());
+        Long key = 0L;
+        if (!socksByColor.isEmpty()) {
+            key = Collections.max(socksByColor.keySet()) + 1;
         }
+        socksByColor.put(key, socks);
+        socksList.put(colorSocks, socksByColor);
+        saveToFile();
+        return socks;
     }
 
     @Override
     public void takeSocks(Socks socks) {
-        List<Integer> keysToRemove = new ArrayList<>();
-        for (Map.Entry<Integer, Socks> socksEntry : socksList.entrySet()) {
-            if (socksEntry.getValue().equals(socks)) {
-                keysToRemove.add(socksEntry.getKey());
-            }
-        }
-        if (keysToRemove.isEmpty()) {
+        ColorSocks color = socks.getColorSocks();
+        Map<Long, Socks> socksByNumber = socksList.get(color);
+        if (socksByNumber == null || !socksByNumber.containsValue(socks)) {
             throw new IllegalArgumentException("Таких носков нет");
         }
-        for (Integer key : keysToRemove) {
-            socksList.remove(key);
-            saveToFile();
+        for (Map.Entry<Long, Socks> entry : socksByNumber.entrySet()) {
+            if (entry.getValue().equals(socks)) {
+                if (entry.getValue().getQuantity() == socks.getQuantity()) {
+                    socksByNumber.remove(entry.getKey());
+                } else {
+                    entry.getValue().setQuantity(entry.getValue().getQuantity() - socks.getQuantity());
+                }
+                saveToFile();
+                break;
+            }
         }
     }
 
     @Override
     public List<Socks> getSocks(int cottonMin, int cottonMax) {
-        List<Socks> keysToGetNumber = new ArrayList<>();
-        for (Map.Entry<Integer, Socks> socksEntry : socksList.entrySet()) {
-            if (socksEntry.getValue().getCottonPart() >= cottonMin && socksEntry.getValue().getCottonPart() <= cottonMax) {
-                keysToGetNumber.add(socksEntry.getValue());
+        List<Socks> socksInRange = new ArrayList<>();
+        for (Map.Entry<ColorSocks, Map<Long, Socks>> colorEntry : socksList.entrySet()) {
+            for (Socks socks : colorEntry.getValue().values()) {
+                if (socks.getCottonPart() >= cottonMin && socks.getCottonPart() <= cottonMax) {
+                    socksInRange.add(socks);
+                }
             }
         }
-        if (keysToGetNumber.isEmpty()) {
-            return null;
-        } else {
-            return keysToGetNumber;
-        }
+        return socksInRange.isEmpty() ? null : socksInRange;
     }
 
     @Override
     public boolean deleteSocks(ColorSocks color, SizeSocks size, int cottonPart, int quantity) {
-        for (Map.Entry<Integer, Socks> socksEntry : socksList.entrySet()) {
-            if (socksEntry.getValue().getColorSocks().equals(color) &&
-                    socksEntry.getValue().getSizeSocks().equals(size) &&
-                    socksEntry.getValue().getCottonPart() == cottonPart &&
-                    socksEntry.getValue().getQuantity() == quantity) {
-                socksList.remove(socksEntry.getKey());
-                saveToFile();
-                return true;
+        Map<Long, Socks> socksByNumber = socksList.get(color);
+        if (socksByNumber == null) {
+            return false;
+        }
+        Long foundNumber = null;
+        for (Map.Entry<Long, Socks> entry : socksByNumber.entrySet()) {
+            Socks socks = entry.getValue();
+            if (socks.getSizeSocks() == size &&
+                    socks.getCottonPart() == cottonPart &&
+                    socks.getQuantity() == quantity) {
+                foundNumber = entry.getKey();
+                break;
             }
         }
-        return false;
-    }
-
-    @Override
-    public List<Socks> getAllSocks() {
-        return new ArrayList<>(socksList.values());
+        if (foundNumber == null) {
+            return false;
+        }
+        socksByNumber.remove(foundNumber);
+        saveToFile();
+        return true;
     }
 
     private void saveToFile() {
@@ -108,8 +111,12 @@ public class SocksServiceImpl implements SocksService {
     private void readFromFile() {
         String json = fileService.readFromFileSocks();
         try {
-            socksList = new ObjectMapper().readValue(json, new TypeReference<Map<Integer, Socks>>() {
-            });
+            if (json == null || json.isEmpty()) {
+                socksList = new HashMap<>();
+            } else {
+                socksList = new ObjectMapper().readValue(json, new TypeReference<Map<ColorSocks, Map<Long, Socks>>>() {
+                });
+            }
         } catch (JsonProcessingException e) {
             throw new RuntimeException(e);
         }

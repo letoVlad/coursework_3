@@ -7,6 +7,7 @@ import com.example.coursework_3.model.Socks;
 import java.util.List;
 
 public interface SocksService {
+
     Socks addSocks(Socks socks);
 
     void takeSocks(Socks socks);
@@ -14,6 +15,4 @@ public interface SocksService {
     List<Socks> getSocks(int cottonMin, int cottonMax);
 
     boolean deleteSocks(ColorSocks color, SizeSocks size, int cottonPart, int quantity);
-
-    List<Socks> getAllSocks();
 }

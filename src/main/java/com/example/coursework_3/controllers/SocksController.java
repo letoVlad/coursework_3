@@ -28,10 +28,14 @@ public class SocksController {
             @ApiResponse(responseCode = "200 ", description = "Удалось добавить приход;"),
             @ApiResponse(responseCode = "400", description = "Параметры запроса отсутствуют или имеют некорректный формат"),
             @ApiResponse(responseCode = "500 ", description = "Произошла ошибка, не зависящая от вызывающей стороны.")})
-    @PostMapping("/{socks}")
+    @PostMapping()
     public ResponseEntity<Socks> addNewSocks(@RequestBody Socks socks) {
-        socksService.addSocks(socks);
-        return socks != null ? ResponseEntity.ok(socks) : ResponseEntity.notFound().build();
+        if (socks.getCottonPart() >= 0 && socks.getCottonPart() <= 100 && socks.getQuantity() > 0 && socks.getQuantity() % 1 == 0) {
+            socksService.addSocks(socks);
+            return ResponseEntity.ok(socks);
+        } else {
+            return ResponseEntity.badRequest().body(null);
+        }
     }
 
     @Operation(summary = "Регистрирует отпуск носков со склада.")
@@ -50,26 +54,21 @@ public class SocksController {
             @ApiResponse(responseCode = "200 ", description = "запрос выполнен, результат в теле ответа в виде строкового представления целого числа;"),
             @ApiResponse(responseCode = "400", description = "параметры запроса отсутствуют или имеют некорректный формат;"),
             @ApiResponse(responseCode = "500 ", description = "произошла ошибка, не зависящая от вызывающей стороны.")})
-    @GetMapping("/{cottonMin}/{cottonMax}")
-    public ResponseEntity<List<Socks>> getSocks(@PathVariable int cottonMin, @PathVariable int cottonMax) {
+    @GetMapping("/")
+    public ResponseEntity<List<Socks>> getSocks(@RequestParam("cottonMin") int cottonMin, @RequestParam("cottonMax") int cottonMax) {
         List<Socks> socks = socksService.getSocks(cottonMin, cottonMax);
         return ResponseEntity.ok(socks);
     }
 
-    @Operation(summary = "Выводит список всех носков")
-    @GetMapping
-    public ResponseEntity<List<Socks>> getAllSocks() {
-        List<Socks> allIngredients = socksService.getAllSocks();
-        return ResponseEntity.ok(allIngredients);
-    }
 
     @Operation(summary = "Регистрирует списание испорченных (бракованных) носков.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200 ", description = "запрос выполнен, товар списан со склада;"),
             @ApiResponse(responseCode = "400", description = "параметры запроса отсутствуют или имеют некорректный формат;"),
             @ApiResponse(responseCode = "500 ", description = "произошла ошибка, не зависящая от вызывающей стороны. ")})
-    @DeleteMapping("/{color}/{size}/{cottonPart}/{quantity}")
-    public ResponseEntity<Boolean> deleteSocks(@PathVariable ColorSocks color, @PathVariable SizeSocks size, @PathVariable int cottonPart, @PathVariable int quantity) {
+    @DeleteMapping("/")
+    public ResponseEntity<Boolean> deleteSocks(@RequestParam("color") ColorSocks color, @RequestParam("size") SizeSocks size, @RequestParam("cottonPart") int cottonPart, @RequestParam("quantity") int quantity) {
         return socksService.deleteSocks(color, size, cottonPart, quantity) ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
     }
+
 }
